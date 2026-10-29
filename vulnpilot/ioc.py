@@ -1,17 +1,44 @@
-r"""
-ioc.py - List the indicators of compromise (attacker IPs and usernames) that appear in the findings.
+    ### WRITE YOUR CODE BELOW THIS LINE ###
+    # Step 1: gather every evidence line from every finding, without duplicates.
+    # WHY: the same line can appear in several findings, and we want to count
+    # each line only once per indicator.
+    lines = []
+    for finding in findings:
+        for line in finding.evidence_lines:
+            if line not in lines:
+                lines.append(line)
 
-WHO OWNS THIS: TODO
-DIFFICULTY: easy
-TIME ESTIMATE: 1-2 hours
+    # Step 2: count IPs, once per line.
+    # WHY set(): if an IP shows up twice in the same line, it still counts as
+    # one line mentioning it ("how many different evidence lines mention it").
+    ip_pattern = r"\b\d{1,3}(?:\.\d{1,3}){3}\b"
+    ip_counts = {}
+    for line in lines:
+        for ip in set(re.findall(ip_pattern, line)):
+            ip_counts[ip] = ip_counts.get(ip, 0) + 1
 
-WHAT GOES IN
-    events: list of LogEvent (you may not need it).
-    findings: list of Finding. Use finding.evidence_lines and finding.users.
-    Example finding evidence line: "Oct 24 10:13:08 web01 sshd[2204]: Accepted password for admin from 192.0.2.10 port 40186 ssh2"
+    # Step 3: count usernames from finding.users.
+    # WHY count by evidence line: a user counts once for every different line
+    # that mentions the name. We only look at lines from findings that list the
+    # user, and we skip duplicate lines so the same line is not counted twice.
+    user_counts = {}
+    for finding in findings:
+        for name in finding.users:
+            if name not in user_counts:
+                user_counts[name] = 0
+    for name in user_counts:
+        for line in lines:
+            # whole-word match so "admin" does not match inside "administrator"
+            if re.search(r"\b" + re.escape(name) + r"\b", line):
+                user_counts[name] += 1
 
-WHAT MUST COME OUT
-    A list of Indicator (kind, value, count): one "ip" Indicator per different IP and one "user"
+    # Step 4: build the Indicator list (IPs first, then users).
+    result = []
+    for ip, count in ip_counts.items():
+        result.append(Indicator("ip", ip, count))
+    for name, count in user_counts.items():
+        result.append(Indicator("user", name, count))
+    ### WRITE YOUR CODE ABOVE THIS LINE ###): one "ip" Indicator per different IP and one "user"
     Indicator per different username found in the findings. count = how many different evidence
     lines mention it. Empty list [] if there are no findings.
     For auth_attack.log it includes: Indicator("ip", "192.0.2.10", 8), Indicator("ip", "198.51.100.7", 8),
